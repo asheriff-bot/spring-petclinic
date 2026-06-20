@@ -13,7 +13,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
+                git branch: 'main', url: 'https://github.com/asheriff-bot/spring-petclinic.git'
             }
         }
 
@@ -27,11 +27,11 @@ pipeline {
             steps {
                 script {
                     try {
-                        withCredentials([string(credentialsId: 'sonarqube-token', variable: 'SONAR_TOKEN')]) {
+                        withCredentials([string(credentialsId: 'sonarqube-system-token', variable: 'SONAR_TOKEN')]) {
                             sh './mvnw -B sonar:sonar -DskipTests'
                         }
                     } catch (ignored) {
-                        echo 'Skipping SonarQube: add Jenkins credential "sonarqube-token" (SonarQube user token).'
+                        echo 'Skipping SonarQube: add Jenkins credential "sonarqube-system-token" (SonarQube user token).'
                     }
                 }
             }

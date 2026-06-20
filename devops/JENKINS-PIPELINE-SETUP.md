@@ -19,7 +19,7 @@ git push origin main
 
 1. http://localhost:8081 → **Manage Jenkins → Credentials**.
 2. **(global) → Add Credentials**.
-3. Kind: **Secret text**, ID: **`sonarqube-token`**, Secret: paste SonarQube token.
+3. Kind: **Secret text**, ID: **`sonarqube-system-token`**, Secret: paste SonarQube token.
 
 ## 4. Configure the Build job
 
@@ -41,6 +41,6 @@ This switches the **Build** job to **Pipeline from SCM** using `Jenkinsfile` on 
 | Issue | Fix |
 |-------|-----|
 | Checkout fails | Push `Jenkinsfile` to GitHub first |
-| SonarQube skipped | Add credential `sonarqube-token` |
+| SonarQube skipped | Add credential `sonarqube-system-token` under System → Global |
 | SonarQube connection refused | Ensure stack is up: `./devops/scripts/02-start-stack.sh` |
 | Build &lt; 1 second | Old empty pipeline — re-run step 4 |
