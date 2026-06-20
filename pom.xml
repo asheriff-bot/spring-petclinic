@@ -35,6 +35,14 @@
     <maven-checkstyle.version>3.6.0</maven-checkstyle.version>
     <nohttp-checkstyle.version>0.0.11</nohttp-checkstyle.version>
     <spring-format.version>0.0.47</spring-format.version>
+
+    <!-- SonarQube (Jenkins CI) -->
+    <sonar.projectKey>spring-petclinic</sonar.projectKey>
+    <sonar.projectName>spring-petclinic</sonar.projectName>
+    <sonar.host.url>http://sonarqube:9000</sonar.host.url>
+    <sonar.java.source>${java.version}</sonar.java.source>
+    <sonar.coverage.jacoco.xmlReportPaths>${project.build.directory}/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+    <sonar-maven-plugin.version>5.0.0.4389</sonar-maven-plugin.version>
   </properties>
 
   <dependencies>
@@ -272,6 +280,11 @@
             </configuration>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.sonarsource.scanner.maven</groupId>
+        <artifactId>sonar-maven-plugin</artifactId>
+        <version>${sonar-maven-plugin.version}</version>
       </plugin>
       <plugin>
         <groupId>org.jacoco</groupId>
