@@ -55,6 +55,8 @@ Inside the network, Jenkins talks to SonarQube at **`http://sonarqube:9000`** (c
 | Jenkins on the network | `petclinic-jenkins` | Done |
 | SonarQube on the network | `petclinic-sonarqube` + `petclinic-sonarqube-db` | Done |
 
+See **Figure 1** below for Docker Desktop proof of the running stack.
+
 ---
 
 ## Step-by-step — how I built it
@@ -115,6 +117,12 @@ docker compose -f devops/docker-compose.yml ps
 docker network inspect petclinic-devops-net
 ```
 
+**Figure 1 — Docker Desktop: `petclinic-devops` stack running**
+
+![Docker Desktop showing petclinic-jenkins, petclinic-sonarqube, and petclinic-sonarqube-db containers on the petclinic-devops compose project](devops/docs/screenshots/01-docker-desktop-petclinic-devops-stack.png)
+
+*Screenshot I took from Docker Desktop. All three containers are up — Jenkins on port 8081, SonarQube on 9000, and the Postgres DB behind SonarQube (no host port, which is what I wanted).*
+
 ### 4. First login to Jenkins
 
 On first start, Jenkins prints an initial admin password:
@@ -168,15 +176,33 @@ ANALYSIS SUCCESSFUL, you can find the results at:
 http://sonarqube:9000/dashboard?id=spring-petclinic
 ```
 
+**Figure 4 — SonarQube: `spring-petclinic` project dashboard**
+
+![SonarQube dashboard for spring-petclinic showing Quality Gate Passed, 92.1% coverage, and zero bugs](devops/docs/screenshots/04-sonarqube-spring-petclinic-quality-gate.png)
+
+*I noticed SonarQube sometimes shows a red banner about a background task even when the Quality Gate says Passed — I thought that was confusing at first, but the metrics and gate status are from the successful scan (Build #7).*
+
 ---
 
 ## Proof the pipeline is real (not a empty job)
 
 Early builds (**#1–#4**) finished in milliseconds — that was an empty pipeline script. I thought everything was fine because Jenkins showed a green checkmark, but nothing was actually compiling.
 
+**Figure 2 — Jenkins Build #2: empty pipeline (false success)**
+
+![Jenkins console output for Build 2 showing only Pipeline Start and End with Finished SUCCESS in about 41 ms](devops/docs/screenshots/02-jenkins-build-02-empty-pipeline.png)
+
+*This is the screenshot that made me realize something was wrong — green checkmark, but the log is basically empty. No `git`, no Maven, nothing.*
+
 Build **#5** was the first real run (~99 seconds): **61 tests**, 59 passed, 2 skipped, 0 failed.
 
-Build **#7** was the first full run with SonarQube (~102 seconds): build, tests, and analysis all succeded.
+**Figure 3 — Jenkins Build #5: unit tests passing**
+
+![Jenkins Tests page for Build 5 showing 61 tests with 59 passed and 2 skipped](devops/docs/screenshots/03-jenkins-build-05-unit-tests-passing.png)
+
+*I saved this one because it proves the Maven test stage actually ran — not just a fast fake SUCCESS.*
+
+Build **#7** was the first full run with SonarQube (~102 seconds): build, tests, and analysis all succeded. (Figure 4 above is the SonarQube side of that same milestone.)
 
 ---
 
@@ -226,6 +252,20 @@ docker exec petclinic-jenkins tail -f /var/jenkins_home/jobs/Build/builds/7/log
 | `devops/JENKINS-PIPELINE-SETUP.md` | Pipeline + credential instructions |
 | `Jenkinsfile` | Declarative CI pipeline |
 | `pom.xml` (Sonar section) | SonarQube Maven plugin + project key |
+| `devops/docs/screenshots/` | Labeled proof screenshots (see index below) |
+
+---
+
+## Screenshot index (quick reference)
+
+| Figure | File | What it proves |
+|--------|------|----------------|
+| **Figure 1** | `devops/docs/screenshots/01-docker-desktop-petclinic-devops-stack.png` | Docker stack + base images running on compose project `petclinic-devops` |
+| **Figure 2** | `devops/docs/screenshots/02-jenkins-build-02-empty-pipeline.png` | Early mistake — Jenkins job succeeded without doing any work |
+| **Figure 3** | `devops/docs/screenshots/03-jenkins-build-05-unit-tests-passing.png` | Real CI — 61 tests executed, all passing (2 skipped) |
+| **Figure 4** | `devops/docs/screenshots/04-sonarqube-spring-petclinic-quality-gate.png` | SonarQube analysis uploaded — Quality Gate Passed, 92.1% coverage |
+
+I kept the files under `devops/docs/screenshots/` so paths stay stable if someone clones the fork. There is also a short `README.md` in that folder with the same labels.
 
 ---
 
