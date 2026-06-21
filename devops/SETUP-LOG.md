@@ -113,7 +113,7 @@ docker exec petclinic-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
 ## Stop / clean up
 
 ```bash
-cd devops && docker compose down          # keep volumes
-cd devops && docker compose down -v       # remove volumes too
+./devops/scripts/03-stop-stack.sh          # keep volumes
+./devops/scripts/03-stop-stack.sh -v       # remove volumes too
 docker network rm petclinic-devops-net    # only after containers removed
 ```

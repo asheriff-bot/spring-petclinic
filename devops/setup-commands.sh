@@ -25,3 +25,11 @@ curl http://localhost:9000/api/system/status
 
 # Jenkins initial password (run locally, do not commit output):
 # docker exec petclinic-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
+
+# --- stop stack ---
+# ./devops/scripts/03-stop-stack.sh
+# ./devops/scripts/03-stop-stack.sh -v
+
+# --- jenkins pipeline + quality gate ---
+# ./devops/scripts/05-configure-sonarqube-jenkins.sh
+# ./devops/scripts/04-configure-jenkins-pipeline.sh

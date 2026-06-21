@@ -26,15 +26,16 @@ git push origin main
 From repo root:
 
 ```bash
-./devops/scripts/03-configure-jenkins-pipeline.sh
+./devops/scripts/05-configure-sonarqube-jenkins.sh
+./devops/scripts/04-configure-jenkins-pipeline.sh
 ```
 
-This switches the **Build** job to **Pipeline from SCM** using `Jenkinsfile` on `main`.
+This switches the **Build** job to **Pipeline from SCM** using `Jenkinsfile` on `main`, with SonarQube scan + Quality Gate stages.
 
 ## 5. Run the pipeline
 
 1. Jenkins dashboard → **Build** → **Build Now**.
-2. Open **Console Output** — expect checkout, Maven verify (~2–5 min), SonarQube scan.
+2. Open **Console Output** — expect checkout, Maven verify (~2–5 min), SonarQube scan, Quality Gate.
 
 ## Troubleshooting
 
@@ -43,4 +44,5 @@ This switches the **Build** job to **Pipeline from SCM** using `Jenkinsfile` on 
 | Checkout fails | Push `Jenkinsfile` to GitHub first |
 | SonarQube skipped | Add credential `sonarqube-system-token` under System → Global |
 | SonarQube connection refused | Ensure stack is up: `./devops/scripts/02-start-stack.sh` |
-| Build &lt; 1 second | Old empty pipeline — re-run step 4 |
+| Build &lt; 1 second | Old empty pipeline — re-run `./devops/scripts/04-configure-jenkins-pipeline.sh` |
+| Quality Gate skipped | Run `./devops/scripts/05-configure-sonarqube-jenkins.sh` first |

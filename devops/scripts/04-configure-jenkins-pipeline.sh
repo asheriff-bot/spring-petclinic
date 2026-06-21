@@ -39,11 +39,29 @@ pipeline {
             steps {
                 script {
                     try {
-                        withCredentials([string(credentialsId: 'sonarqube-system-token', variable: 'SONAR_TOKEN')]) {
+                        withSonarQubeEnv(credentialsId: 'sonarqube-system-token', installationName: 'SonarQube') {
                             sh './mvnw -B sonar:sonar -DskipTests'
                         }
                     } catch (ignored) {
-                        echo 'Skipping SonarQube: add Jenkins credential "sonarqube-system-token" (SonarQube user token).'
+                        echo 'Skipping SonarQube scan — install plugin via devops/scripts/05-configure-sonarqube-jenkins.sh'
+                        echo 'and ensure credential sonarqube-system-token exists under System → Global.'
+                    }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                script {
+                    try {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: true
+                        }
+                    } catch (err) {
+                        if (err.message?.contains('Quality Gate')) {
+                            error("Quality Gate failed: ${err.message}")
+                        }
+                        echo "Skipping Quality Gate: ${err.message}"
                     }
                 }
             }

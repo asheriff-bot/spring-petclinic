@@ -139,7 +139,8 @@ I added a **`Jenkinsfile`** at the repo root and SonarQube settings in **`pom.xm
 
 1. **Checkout** — clone `main` from my fork  
 2. **Build & Test** — `./mvnw -B verify`  
-3. **SonarQube Analysis** — `./mvnw -B sonar:sonar -DskipTests`
+3. **SonarQube Analysis** — `./mvnw -B sonar:sonar -DskipTests`  
+4. **Quality Gate** — `waitForQualityGate abortPipeline: true`
 
 I mapped Jenkins to port **8081** on purpose because I might run the PetClinic app itself on **8080** later.
 
@@ -217,19 +218,26 @@ Build **#7** was the first full run with SonarQube (~102 seconds): build, tests,
 **Stop stack (keep data)**
 
 ```bash
-cd devops && docker compose down
+./devops/scripts/03-stop-stack.sh
 ```
 
 **Stop stack and remove volumes**
 
 ```bash
-cd devops && docker compose down -v
+./devops/scripts/03-stop-stack.sh -v
+```
+
+**Configure SonarQube plugin + Quality Gate support in Jenkins**
+
+```bash
+./devops/scripts/05-configure-sonarqube-jenkins.sh
+./devops/scripts/04-configure-jenkins-pipeline.sh
 ```
 
 **Re-apply Jenkins job config from embedded pipeline script**
 
 ```bash
-./devops/scripts/03-configure-jenkins-pipeline.sh
+./devops/scripts/04-configure-jenkins-pipeline.sh
 ```
 
 **Tail Jenkins build log (example: build 7)**
@@ -247,7 +255,9 @@ docker exec petclinic-jenkins tail -f /var/jenkins_home/jobs/Build/builds/7/log
 | `devops/docker-compose.yml` | Jenkins + SonarQube + Postgres stack |
 | `devops/scripts/01-create-network.sh` | Create `petclinic-devops-net` |
 | `devops/scripts/02-start-stack.sh` | Pull images and start containers |
-| `devops/scripts/03-configure-jenkins-pipeline.sh` | Embed pipeline in Jenkins `Build` job |
+| `devops/scripts/03-stop-stack.sh` | Stop stack (`-v` to drop volumes) |
+| `devops/scripts/04-configure-jenkins-pipeline.sh` | Embed pipeline in Jenkins `Build` job |
+| `devops/scripts/05-configure-sonarqube-jenkins.sh` | SonarQube plugin + server for Quality Gate |
 | `devops/SETUP-LOG.md` | Short command-oriented setup log |
 | `devops/JENKINS-PIPELINE-SETUP.md` | Pipeline + credential instructions |
 | `Jenkinsfile` | Declarative CI pipeline |
@@ -273,7 +283,11 @@ I kept the files under `devops/docs/screenshots/` so paths stay stable if someon
 
 **SonarQube shows `(unhealthy)` in `docker ps`**
 
-The service is actually UP — I can open http://localhost:9000 and scans succeed. The compose healthcheck uses `curl`, which is not installed in the SonarQube image, so Docker marks it unhealthy even when it works. I thought about fixing the healthcheck later; it doesnt affect the assignment.
+I fixed this later by changing the compose healthcheck to use bash `/dev/tcp` against the SonarQube API (the old check used `curl`, which is not in the image). After `./devops/scripts/02-start-stack.sh` or recreating the container, it should show healthy.
+
+**Quality Gate in the pipeline**
+
+I added a **Quality Gate** stage with `waitForQualityGate abortPipeline: true` so the build fails if code quality regresses. This needs the SonarQube Jenkins plugin — I install it with `./devops/scripts/05-configure-sonarqube-jenkins.sh`.
 
 **Build #6 stalled after a Jenkins restart**
 
@@ -289,10 +303,9 @@ On first login SonarQube uses `admin` / `admin` and forces a password change. I 
 
 If I had more time for bonus work, I would:
 
-- Add a **Quality Gate** step (`waitForQualityGate`) so the pipeline fails on bad code quality  
-- Fix the SonarQube Docker healthcheck  
-- Add a **`03-stop-stack.sh`** helper script  
 - Trigger builds from GitHub webhooks instead of manual **Build Now**
+- Archive the built JAR as a Jenkins artifact
+- Add the PetClinic app container to the same compose network
 
 ---
 
