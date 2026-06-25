@@ -8,7 +8,7 @@ set -euo pipefail
 REPO_URL="${REPO_URL:-https://github.com/asheriff-bot/spring-petclinic.git}"
 BRANCH="${BRANCH:-main}"
 JOB_NAME="${JOB_NAME:-Build}"
-POLL_SPEC="${POLL_SPEC:-H/1 * * * *}" # Increase to 5 minutes when ready to go to production
+POLL_SPEC="${POLL_SPEC:-* * * * *}" # Increase to 5 minutes when ready to go to production
 
 # ── 1. Wait for Jenkins ──────────────────────────────────────────────────────
 wait_for_jenkins() {
