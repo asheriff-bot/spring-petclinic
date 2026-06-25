@@ -1,91 +1,49 @@
 #!/usr/bin/env bash
-# Embed the full pipeline script in the Build job (avoids SCM reload / lightweight issues)
+# Configure the Jenkins Build job with an SCM-backed pipeline and auto-registered poll trigger.
+# The trigger is registered via a Groovy init script that runs on every Jenkins startup —
+# no manual "Build Now" click required.
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_URL="${REPO_URL:-https://github.com/asheriff-bot/spring-petclinic.git}"
 BRANCH="${BRANCH:-main}"
 JOB_NAME="${JOB_NAME:-Build}"
+POLL_SPEC="${POLL_SPEC:-H/1 * * * *}" # Increase to 5 minutes when ready to go to production
 
-PIPELINE_SCRIPT=$(cat <<'GROOVY'
-pipeline {
-    agent any
-
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        timestamps()
-    }
-
-    environment {
-        SONAR_HOST_URL = 'http://sonarqube:9000'
-    }
-
-    stages {
-        stage('Checkout') {
-            steps {
-                git branch: 'main', url: 'https://github.com/asheriff-bot/spring-petclinic.git'
-            }
-        }
-
-        stage('Build & Test') {
-            steps {
-                sh './mvnw -B verify'
-            }
-        }
-
-        stage('SonarQube Analysis') {
-            steps {
-                script {
-                    try {
-                        withSonarQubeEnv(credentialsId: 'sonarqube-system-token', installationName: 'SonarQube') {
-                            sh './mvnw -B sonar:sonar -DskipTests'
-                        }
-                    } catch (ignored) {
-                        echo 'Skipping SonarQube scan — install plugin via devops/scripts/05-configure-sonarqube-jenkins.sh'
-                        echo 'and ensure credential sonarqube-system-token exists under System → Global.'
-                    }
-                }
-            }
-        }
-
-        stage('Quality Gate') {
-            steps {
-                script {
-                    try {
-                        timeout(time: 5, unit: 'MINUTES') {
-                            waitForQualityGate abortPipeline: true
-                        }
-                    } catch (err) {
-                        if (err.message?.contains('Quality Gate')) {
-                            error("Quality Gate failed: ${err.message}")
-                        }
-                        echo "Skipping Quality Gate: ${err.message}"
-                    }
-                }
-            }
-        }
-    }
-
-    post {
-        always {
-            junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
-        }
-        success {
-            echo 'Pipeline completed successfully.'
-        }
-        failure {
-            echo 'Pipeline failed — see console output above.'
-        }
-    }
+# ── 1. Wait for Jenkins ──────────────────────────────────────────────────────
+wait_for_jenkins() {
+  echo "[..] waiting for Jenkins ..."
+  for i in $(seq 1 40); do
+    if curl -sf -o /dev/null http://localhost:8081/login; then
+      echo "[ok] Jenkins is up"
+      return 0
+    fi
+    sleep 5
+  done
+  echo "[error] Jenkins did not start in time"
+  exit 1
 }
-GROOVY
+
+wait_for_jenkins
+
+# ── 2. Install required plugins ──────────────────────────────────────────────
+REQUIRED_PLUGINS=(
+  workflow-aggregator
+  git
+  sonar
+  timestamper
+  junit
 )
 
-ESCAPED_SCRIPT=$(python3 -c 'import sys, xml.sax.saxutils as x; print(x.escape(sys.stdin.read()))' <<< "$PIPELINE_SCRIPT")
+echo "[..] installing required Jenkins plugins ..."
+docker exec petclinic-jenkins jenkins-plugin-cli \
+  --plugins "${REQUIRED_PLUGINS[*]}" \
+  --verbose 2>&1 | grep -E "^(Installing|Skipping|ERROR|Done)" || true
 
-CONFIG=$(cat <<EOF
+# ── 3. Write job config.xml ──────────────────────────────────────────────────
+# Uses CpsScmFlowDefinition so the job has a real SCM attached (required for
+# poll-based triggering). The Jenkinsfile is read from the repo at build time.
+JOB_CONFIG=$(cat <<EOF
 <?xml version='1.1' encoding='UTF-8'?>
 <flow-definition plugin="workflow-job@1571.1580.v18e46842c125">
   <description>CI pipeline for spring-petclinic — build, test, SonarQube</description>
@@ -97,17 +55,36 @@ CONFIG=$(cat <<EOF
         <numToKeep>10</numToKeep>
         <artifactDaysToKeep>-1</artifactDaysToKeep>
         <artifactNumToKeep>-1</artifactNumToKeep>
-        <removeLastBuild>false</removeLastBuild>
       </strategy>
     </jenkins.model.BuildDiscarderProperty>
-    <com.coravy.hudson.plugins.github.GithubProjectProperty plugin="github@1.47.0">
-      <projectUrl>${REPO_URL}/</projectUrl>
-      <displayName>spring-petclinic</displayName>
-    </com.coravy.hudson.plugins.github.GithubProjectProperty>
+    <org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
+      <triggers>
+        <hudson.triggers.SCMTrigger>
+          <spec>${POLL_SPEC}</spec>
+          <ignorePostCommitHooks>false</ignorePostCommitHooks>
+        </hudson.triggers.SCMTrigger>
+      </triggers>
+    </org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty>
   </properties>
-  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps@4331.v9d06ed4658ff">
-    <script>${ESCAPED_SCRIPT}</script>
-    <sandbox>true</sandbox>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsScmFlowDefinition" plugin="workflow-cps@4331.v9d06ed4658ff">
+    <scm class="hudson.plugins.git.GitSCM" plugin="git@5.10.1">
+      <configVersion>2</configVersion>
+      <userRemoteConfigs>
+        <hudson.plugins.git.UserRemoteConfig>
+          <url>${REPO_URL}</url>
+        </hudson.plugins.git.UserRemoteConfig>
+      </userRemoteConfigs>
+      <branches>
+        <hudson.plugins.git.BranchSpec>
+          <name>*/${BRANCH}</name>
+        </hudson.plugins.git.BranchSpec>
+      </branches>
+      <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
+      <submoduleCfg class="empty-list"/>
+      <extensions/>
+    </scm>
+    <scriptPath>Jenkinsfile</scriptPath>
+    <lightweight>true</lightweight>
   </definition>
   <triggers/>
   <disabled>false</disabled>
@@ -115,24 +92,49 @@ CONFIG=$(cat <<EOF
 EOF
 )
 
-TMPFILE="$(mktemp)"
-echo "$CONFIG" > "$TMPFILE"
+echo "[..] writing job config ..."
+docker exec petclinic-jenkins mkdir -p "/var/jenkins_home/jobs/${JOB_NAME}"
+echo "$JOB_CONFIG" | docker exec -i petclinic-jenkins tee "/var/jenkins_home/jobs/${JOB_NAME}/config.xml" > /dev/null
+docker exec petclinic-jenkins chown -R jenkins:jenkins "/var/jenkins_home/jobs/${JOB_NAME}"
 
-echo "[..] embedding pipeline in Jenkins job '${JOB_NAME}' ..."
-docker cp "$TMPFILE" "petclinic-jenkins:/var/jenkins_home/jobs/${JOB_NAME}/config.xml"
-rm -f "$TMPFILE"
+# ── 4. Drop a Groovy init script to register the trigger on every startup ────
+# Jenkins runs all *.groovy files in init.groovy.d/ before marking itself ready.
+# This script looks up the job, finds the SCMTrigger from PipelineTriggersJobProperty,
+# and calls start() on it — which is the call that actually schedules the poll.
+INIT_SCRIPT=$(cat <<'GROOVY'
+import hudson.triggers.SCMTrigger
+import org.jenkinsci.plugins.workflow.job.WorkflowJob
+import org.jenkinsci.plugins.workflow.job.properties.PipelineTriggersJobProperty
 
-echo "[..] restarting Jenkins to reload job definition ..."
-docker restart petclinic-jenkins >/dev/null
+def jobName = System.getenv('JENKINS_POLL_JOB') ?: 'Build'
 
-echo "[..] waiting for Jenkins to come back ..."
-for i in $(seq 1 30); do
-  if curl -sf -o /dev/null http://localhost:8081/login; then
-    echo "[ok] Jenkins is up — click Build Now (expect several minutes, not 0.1 sec)"
-    exit 0
-  fi
-  sleep 3
-done
+jenkins.model.Jenkins.instance.allItems(WorkflowJob).each { job ->
+  if (job.name != jobName) return
 
-echo "[warn] Jenkins may still be starting — open http://localhost:8081 and run Build Now"
-exit 0
+  def triggersProp = job.getProperty(PipelineTriggersJobProperty)
+  if (triggersProp == null) {
+    println "[init] ${job.name}: no PipelineTriggersJobProperty found — skipping"
+    return
+  }
+
+  triggersProp.triggers.each { trigger ->
+    if (trigger instanceof SCMTrigger) {
+      trigger.start(job, true)
+      println "[init] ${job.name}: SCMTrigger started (spec: ${trigger.spec})"
+    }
+  }
+}
+GROOVY
+)
+
+echo "[..] installing trigger-registration init script ..."
+docker exec petclinic-jenkins mkdir -p /var/jenkins_home/init.groovy.d
+echo "$INIT_SCRIPT" | docker exec -i petclinic-jenkins tee /var/jenkins_home/init.groovy.d/register-scm-trigger.groovy > /dev/null
+docker exec petclinic-jenkins chown -R jenkins:jenkins /var/jenkins_home/init.groovy.d
+
+# ── 5. Restart Jenkins so both the job config and init script take effect ────
+echo "[..] restarting Jenkins ..."
+docker restart petclinic-jenkins > /dev/null
+wait_for_jenkins
+
+echo "[ok] Done. Open http://localhost:8081/job/${JOB_NAME}/polling to verify the Git Polling Log."
