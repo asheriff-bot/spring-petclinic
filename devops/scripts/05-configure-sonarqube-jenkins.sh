@@ -2,9 +2,10 @@
 # Wire SonarQube into Jenkins end-to-end:
 #   1. Install the SonarQube Jenkins plugin
 #   2. Provision a SonarQube user token via REST API (or use $SONAR_TOKEN if set)
-#   3. Inject the token into Jenkins as a Secret-text credential
-#   4. Register the SonarQube server in Jenkins global config
-#   5. Restart Jenkins once and verify
+#   3. Register the SonarQube → Jenkins webhook (for waitForQualityGate)
+#   4. Inject the token into Jenkins as a Secret-text credential
+#   5. Register the SonarQube server in Jenkins global config
+#   6. Restart Jenkins once and verify
 #
 # Idempotent: revokes any existing token of the same name, replaces the
 # Jenkins credential if it already exists, overwrites the server config.
@@ -14,7 +15,8 @@
 #   SONAR_PUBLIC_URL (host-side, for our REST calls),
 #   SONAR_ADMIN_USER, SONAR_ADMIN_PASSWORD,
 #   SONAR_TOKEN_NAME, SONAR_TOKEN (skip provisioning if set),
-#   JENKINS_CONTAINER, CREDENTIAL_ID
+#   JENKINS_CONTAINER, CREDENTIAL_ID,
+#   SONAR_WEBHOOK_NAME, SONAR_WEBHOOK_URL (Jenkins URL as SonarQube sees it)
 
 set -euo pipefail
 
@@ -25,6 +27,12 @@ SONAR_ADMIN_USER="${SONAR_ADMIN_USER:-admin}"
 SONAR_ADMIN_PASSWORD="${SONAR_ADMIN_PASSWORD:-admin}"
 SONAR_TOKEN_NAME="${SONAR_TOKEN_NAME:-jenkins}"
 SONAR_TOKEN="${SONAR_TOKEN:-}"
+
+# Webhook from SonarQube → Jenkins, used by waitForQualityGate.
+# URL must be reachable from inside the SonarQube container, so we use the
+# Jenkins compose service name on petclinic-devops-net (internal port 8080).
+SONAR_WEBHOOK_NAME="${SONAR_WEBHOOK_NAME:-Jenkins}"
+SONAR_WEBHOOK_URL="${SONAR_WEBHOOK_URL:-http://jenkins:8080/sonarqube-webhook/}"
 
 JENKINS_CONTAINER="${JENKINS_CONTAINER:-petclinic-jenkins}"
 CREDENTIAL_ID="${CREDENTIAL_ID:-sonarqube-system-token}"
@@ -87,7 +95,50 @@ else
   echo "[ok] token generated (length ${#SONAR_TOKEN})"
 fi
 
-# ── 4. Stage a one-shot Groovy init script + the token inside Jenkins ────────
+# ── 4. Configure SonarQube webhook → Jenkins (for waitForQualityGate) ────────
+# Without this, the SonarQube Compute Engine never POSTs to Jenkins when
+# analysis completes, and waitForQualityGate just sits until its timeout.
+echo "[..] removing any existing SonarQube webhook named '$SONAR_WEBHOOK_NAME' ..."
+EXISTING_HOOKS="$(curl -s -u "$SONAR_ADMIN_USER:$SONAR_ADMIN_PASSWORD" \
+  "$SONAR_PUBLIC_URL/api/webhooks/list")"
+
+# Pull out the "key" of every webhook whose "name" matches SONAR_WEBHOOK_NAME.
+# Parses the flat JSON object stream: ...{"key":"abc","name":"Jenkins",...}...
+EXISTING_KEYS="$(echo "$EXISTING_HOOKS" \
+  | tr ',' '\n' \
+  | awk -v name="\"name\":\"$SONAR_WEBHOOK_NAME\"" '
+      /"key":/ { gsub(/.*"key":"|".*/, ""); key=$0; next }
+      $0 == name && key { print key; key="" }
+    ' || true)"
+
+if [ -n "$EXISTING_KEYS" ]; then
+  while IFS= read -r key; do
+    [ -z "$key" ] && continue
+    curl -s -o /dev/null -u "$SONAR_ADMIN_USER:$SONAR_ADMIN_PASSWORD" \
+      -X POST "$SONAR_PUBLIC_URL/api/webhooks/delete" \
+      --data-urlencode "webhook=$key" || true
+    echo "[ok] deleted webhook key=$key"
+  done <<< "$EXISTING_KEYS"
+else
+  echo "[ok] no existing webhook to remove"
+fi
+
+echo "[..] creating SonarQube webhook '$SONAR_WEBHOOK_NAME' → $SONAR_WEBHOOK_URL ..."
+HOOK_RESPONSE="$(curl -s -u "$SONAR_ADMIN_USER:$SONAR_ADMIN_PASSWORD" \
+  -X POST "$SONAR_PUBLIC_URL/api/webhooks/create" \
+  --data-urlencode "name=$SONAR_WEBHOOK_NAME" \
+  --data-urlencode "url=$SONAR_WEBHOOK_URL")"
+
+case "$HOOK_RESPONSE" in
+  *'"webhook"'*'"key"'*) echo "[ok] webhook registered" ;;
+  *)
+    echo "[error] failed to create SonarQube webhook"
+    echo "        response: $HOOK_RESPONSE"
+    exit 1
+    ;;
+esac
+
+# ── 5. Stage a one-shot Groovy init script + the token inside Jenkins ────────
 # The init script runs at startup with full Jenkins privileges, encrypts the
 # secret correctly via hudson.util.Secret, adds the credential, then deletes
 # both itself and the token file so nothing sensitive lingers on disk.
@@ -151,7 +202,7 @@ echo "$INIT_SCRIPT" | docker exec -i "$JENKINS_CONTAINER" \
 docker exec "$JENKINS_CONTAINER" chown jenkins:jenkins \
   "$TOKEN_PATH_IN_CONTAINER" "$INIT_SCRIPT_PATH"
 
-# ── 5. Write SonarQube server config ─────────────────────────────────────────
+# ── 6. Write SonarQube server config ─────────────────────────────────────────
 echo "[..] writing SonarQube server configuration ..."
 CONFIG=$(cat <<EOF
 <?xml version='1.1' encoding='UTF-8'?>
@@ -176,7 +227,7 @@ echo "$CONFIG" > "$TMPFILE"
 docker cp "$TMPFILE" "${JENKINS_CONTAINER}:/var/jenkins_home/hudson.plugins.sonar.SonarGlobalConfiguration.xml"
 rm -f "$TMPFILE"
 
-# ── 6. Single restart so plugin + credential + server config all take effect ─
+# ── 7. Single restart so plugin + credential + server config all take effect ─
 echo "[..] restarting Jenkins ..."
 docker restart "$JENKINS_CONTAINER" >/dev/null
 
@@ -193,7 +244,7 @@ for i in $(seq 1 40); do
   fi
 done
 
-# ── 7. Verify ────────────────────────────────────────────────────────────────
+# ── 8. Verify ────────────────────────────────────────────────────────────────
 # Give Jenkins a beat to flush credentials.xml after the init script runs.
 sleep 3
 if docker exec "$JENKINS_CONTAINER" grep -q "<id>${CREDENTIAL_ID}</id>" \
