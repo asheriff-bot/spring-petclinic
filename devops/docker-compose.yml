@@ -72,6 +72,15 @@ services:
       timeout: 10s
       retries: 10
       start_period: 120s
+  
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: petclinic-zap
+    restart: "no"
+    networks:
+      - petclinic-devops-net
+    volumes:
+      - ./reports/zap:/zap/wrk
 
 networks:
   petclinic-devops-net:
