@@ -10,10 +10,18 @@ pipeline {
         SONAR_HOST_URL = 'http://sonarqube:9000'
     }
 
+    triggers {
+        pollSCM('* * * * *')  // Poll every minute
+    }
+
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/asheriff-bot/spring-petclinic.git'
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[url: 'https://github.com/asheriff-bot/spring-petclinic.git']]
+                ])
             }
         }
 
