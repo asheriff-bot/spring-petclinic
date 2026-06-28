@@ -38,7 +38,9 @@ pipeline {
                         withSonarQubeEnv(credentialsId: 'sonarqube-system-token', installationName: 'SonarQube') {
                             sh './mvnw -B sonar:sonar -DskipTests'
                         }
-                    } catch (ignored) {
+                    } catch (Exception err) {
+                        // Log the error to the console
+                        echo "Caught an error: ${err.getMessage()}"
                         echo 'Skipping SonarQube scan — install plugin via devops/scripts/05-configure-sonarqube-jenkins.sh'
                         echo 'and ensure credential sonarqube-system-token exists under System → Global.'
                     }
