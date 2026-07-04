@@ -15,6 +15,12 @@ pipeline {
         // network (petclinic-devops-net), causing Ryuk connection failures.
         // Override with the Docker Desktop host alias, reachable from any network.
         TESTCONTAINERS_HOST_OVERRIDE = 'host.docker.internal'
+        // Same problem, different subsystem: Spring Boot's docker-compose support
+        // (used by PostgresIntegrationTests) resolves the readiness-check host from
+        // DOCKER_HOST/docker context, which falls back to 127.0.0.1 for a unix://
+        // socket — that's Jenkins itself, not the host publishing the compose
+        // service's port. SERVICES_HOST overrides that resolution explicitly.
+        SERVICES_HOST = 'host.docker.internal'
     }
 
     triggers {
