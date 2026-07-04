@@ -16,6 +16,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=true
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - petclinic-devops-net
     healthcheck:
