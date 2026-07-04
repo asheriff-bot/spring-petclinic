@@ -79,6 +79,7 @@ services:
     image: ghcr.io/zaproxy/zaproxy:stable
     container_name: petclinic-zap
     restart: "no"
+    user: root
     networks:
       - petclinic-devops-net
     volumes:
