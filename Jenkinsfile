@@ -64,11 +64,18 @@ pipeline {
                 }
             }
         }
+
+        stage('ZAP Baseline Scan') {
+            steps {
+                sh './devops/scripts/06-run-zap-baseline.sh'
+            }
+        }
     }
 
     post {
         always {
             junit allowEmptyResults: true, testResults: 'target/surefire-reports/*.xml'
+            archiveArtifacts artifacts: 'devops/reports/zap/*.html', allowEmptyArchive: true
         }
         success {
             echo 'Pipeline completed successfully.'
