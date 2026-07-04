@@ -8,6 +8,13 @@ pipeline {
 
     environment {
         SONAR_HOST_URL = 'http://sonarqube:9000'
+        // Jenkins runs as a container with the host's docker.sock mounted, so
+        // Testcontainers-spawned containers (and Ryuk) are siblings, not children,
+        // of Jenkins. Testcontainers' auto-detected docker host (172.17.0.1, the
+        // default bridge gateway) isn't reachable from Jenkins' custom bridge
+        // network (petclinic-devops-net), causing Ryuk connection failures.
+        // Override with the Docker Desktop host alias, reachable from any network.
+        TESTCONTAINERS_HOST_OVERRIDE = 'host.docker.internal'
     }
 
     triggers {
@@ -19,7 +26,7 @@ pipeline {
             steps {
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: '*/asanche4/deploy-pipeline']],
+                    branches: [[name: '*/main']],
                     userRemoteConfigs: [[url: 'https://github.com/asheriff-bot/spring-petclinic.git']]
                 ])
             }
