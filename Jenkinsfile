@@ -32,7 +32,7 @@ pipeline {
             steps {
                 checkout([
                     $class: 'GitSCM',
-                    branches: [[name: '*/asanche4/deploy-pipeline']],
+                    branches: [[name: '*/main']],
                     userRemoteConfigs: [[url: 'https://github.com/asheriff-bot/spring-petclinic.git']]
                 ])
             }
