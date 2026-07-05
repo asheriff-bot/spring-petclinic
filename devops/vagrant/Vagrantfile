@@ -1,0 +1,31 @@
+# Production web server VM for spring-petclinic.
+# Provider/box are picked per-host by ../scripts/07-install-vm-prerequisites.sh
+# (written to .detected-env, sourced by ../scripts/07-provision-vm.sh) so the
+# same Vagrantfile works on Apple Silicon (qemu), Intel Mac, and Linux
+# (virtualbox) without editing this file.
+
+VM_PROVIDER = ENV.fetch("VM_PROVIDER", "virtualbox")
+VM_BOX      = ENV.fetch("VM_BOX", "generic/ubuntu2204")
+VM_MEMORY   = ENV.fetch("VM_MEMORY", "2048")
+VM_CPUS     = ENV.fetch("VM_CPUS", "2")
+APP_HOST_PORT = ENV.fetch("APP_HOST_PORT", "8080").to_i
+
+Vagrant.configure("2") do |config|
+  config.vm.box = VM_BOX
+  config.vm.hostname = "petclinic-prod"
+
+  config.vm.network "forwarded_port", guest: 8080, host: APP_HOST_PORT, auto_correct: true
+
+  if VM_PROVIDER == "qemu"
+    config.vm.provider "qemu" do |qe|
+      qe.memory = VM_MEMORY
+      qe.smp = VM_CPUS
+    end
+  else
+    config.vm.provider "virtualbox" do |vb|
+      vb.name = "petclinic-prod"
+      vb.memory = VM_MEMORY
+      vb.cpus = VM_CPUS.to_i
+    end
+  end
+end

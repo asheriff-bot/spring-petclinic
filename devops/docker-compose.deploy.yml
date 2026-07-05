@@ -1,0 +1,26 @@
+# Deployment stack (Ansible control node) — additive to devops/docker-compose.yml.
+# Joins the existing petclinic-devops-net so Jenkins can `docker exec`/`docker cp`
+# into it (via the docker.sock it already has mounted) without needing to be on
+# the same network itself.
+
+services:
+  ansible-control:
+    build:
+      context: ./docker/ansible-control
+    image: petclinic-ansible-control
+    container_name: petclinic-ansible-control
+    restart: unless-stopped
+    volumes:
+      - ./ansible:/ansible
+    working_dir: /ansible
+    networks:
+      - petclinic-devops-net
+    extra_hosts:
+      # host.docker.internal is built into Docker Desktop (macOS/Windows);
+      # this makes it resolve on Linux engines too (Docker 20.10+).
+      - "host.docker.internal:host-gateway"
+
+networks:
+  petclinic-devops-net:
+    external: true
+    name: petclinic-devops-net

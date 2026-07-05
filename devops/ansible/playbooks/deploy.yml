@@ -1,0 +1,66 @@
+---
+# Deploy spring-petclinic to the production web server VM.
+# jar_src_path (path to the jar inside the ansible-control container, e.g.
+# /ansible/files/spring-petclinic.jar) must be passed with -e.
+
+- name: Deploy spring-petclinic
+  hosts: webservers
+  become: true
+
+  vars:
+    app_user: petclinic
+    app_dir: /opt/petclinic
+    app_jar: spring-petclinic.jar
+    app_port: 8080
+
+  tasks:
+    - name: Ensure Java 17 (JRE) is installed
+      apt:
+        name: openjdk-17-jre-headless
+        state: present
+        update_cache: true
+
+    - name: Create dedicated app user
+      user:
+        name: "{{ app_user }}"
+        system: true
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Ensure app directory exists
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0755"
+
+    - name: Copy application jar
+      copy:
+        src: "{{ jar_src_path }}"
+        dest: "{{ app_dir }}/{{ app_jar }}"
+        owner: "{{ app_user }}"
+        group: "{{ app_user }}"
+        mode: "0644"
+      notify: restart petclinic
+
+    - name: Install systemd unit
+      template:
+        src: petclinic.service.j2
+        dest: /etc/systemd/system/petclinic.service
+        mode: "0644"
+      notify: restart petclinic
+
+    - name: Ensure petclinic service is enabled and started
+      systemd:
+        name: petclinic
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  handlers:
+    - name: restart petclinic
+      systemd:
+        name: petclinic
+        state: restarted
+        daemon_reload: true
