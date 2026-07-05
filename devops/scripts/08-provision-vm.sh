@@ -3,7 +3,7 @@
 # against an already-running VM).
 #
 # Reads provider/box/sizing from devops/vagrant/.detected-env, written by
-# ./06-install-vm-prerequisites.sh. Override APP_HOST_PORT to change which
+# ./07-install-vm-prerequisites.sh. Override APP_HOST_PORT to change which
 # host port the app (guest :8080) is forwarded to.
 
 set -euo pipefail
@@ -24,7 +24,7 @@ VAGRANT_DIR="$(dirname "$SCRIPT_DIR")/vagrant"
 DETECTED_ENV="$VAGRANT_DIR/.detected-env"
 
 if [ ! -f "$DETECTED_ENV" ]; then
-  echo "[error] $DETECTED_ENV not found — run ./devops/scripts/06-install-vm-prerequisites.sh first"
+  echo "[error] $DETECTED_ENV not found — run ./devops/scripts/07-install-vm-prerequisites.sh first"
   exit 1
 fi
 
@@ -61,4 +61,4 @@ echo "VM ready. Useful commands:"
 echo "  vagrant ssh        (from $VAGRANT_DIR)"
 echo "  vagrant ssh-config (from $VAGRANT_DIR)"
 echo
-echo "Next: ./devops/scripts/08-configure-ansible-control.sh"
+echo "Next: ./devops/scripts/09-configure-ansible-control.sh"

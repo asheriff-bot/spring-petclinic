@@ -22,9 +22,9 @@ infrastructure boundary (network, SSH, systemd) rather than another
 From repo root:
 
 ```bash
-./devops/scripts/06-install-vm-prerequisites.sh   # detects OS/arch, installs a hypervisor + Vagrant if missing
-./devops/scripts/07-provision-vm.sh                # vagrant up, waits for SSH
-./devops/scripts/08-configure-ansible-control.sh   # starts ansible-control, wires up the inventory + SSH key
+./devops/scripts/07-install-vm-prerequisites.sh   # detects OS/arch, installs a hypervisor + Vagrant if missing
+./devops/scripts/08-provision-vm.sh                # vagrant up, waits for SSH
+./devops/scripts/09-configure-ansible-control.sh   # starts ansible-control, wires up the inventory + SSH key
 ```
 
 `06` picks the hypervisor per host so this works wherever the repo is
@@ -44,7 +44,7 @@ Override the pick with `VM_PROVIDER` / `VM_BOX` env vars before running `06`.
 ## Deploying
 
 ```bash
-./devops/scripts/09-deploy-app.sh
+./devops/scripts/10-deploy-app.sh
 ```
 
 Builds the jar (if `target/*.jar` isn't already there), copies it into
@@ -65,8 +65,8 @@ manual deploy and a CI-triggered deploy do exactly the same thing.
 ## Tearing down
 
 ```bash
-./devops/scripts/10-teardown-vm.sh       # stop ansible-control, halt the VM (disk kept)
-./devops/scripts/10-teardown-vm.sh -v    # also destroy the VM entirely
+./devops/scripts/11-teardown-vm.sh       # stop ansible-control, halt the VM (disk kept)
+./devops/scripts/11-teardown-vm.sh -v    # also destroy the VM entirely
 ```
 
 ## Known limitations
@@ -88,6 +88,6 @@ manual deploy and a CI-triggered deploy do exactly the same thing.
 | VirtualBox install needs kernel extension approval | System Settings → Privacy & Security → allow the Oracle extension, then re-run `06` |
 | `07` times out waiting for SSH | `cd devops/vagrant && vagrant up --provider=$VM_PROVIDER` manually to see the full boot log |
 | `08` fails to parse `vagrant ssh-config` | Confirm the VM is running: `cd devops/vagrant && vagrant status` |
-| Ansible ping fails | Re-run `./devops/scripts/08-configure-ansible-control.sh` (regenerates inventory + key) |
-| `09` deploy fails on "container not found" | Run `./devops/scripts/08-configure-ansible-control.sh` first |
+| Ansible ping fails | Re-run `./devops/scripts/09-configure-ansible-control.sh` (regenerates inventory + key) |
+| `09` deploy fails on "container not found" | Run `./devops/scripts/09-configure-ansible-control.sh` first |
 | App not reachable at `:8080` | `cd devops/vagrant && vagrant ssh -c "systemctl status petclinic"` |

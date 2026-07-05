@@ -25,12 +25,12 @@ CONTAINER="${CONTAINER:-petclinic-ansible-control}"
 cd "$REPO_ROOT"
 
 if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
-  echo "[error] $CONTAINER not found — run ./devops/scripts/08-configure-ansible-control.sh first"
+  echo "[error] $CONTAINER not found — run ./devops/scripts/09-configure-ansible-control.sh first"
   exit 1
 fi
 
 # ./mvnw needs a local JDK (separate from the JRE Ansible installs on the VM).
-# Idempotent check-then-install, same pattern as 06-install-vm-prerequisites.sh.
+# Idempotent check-then-install, same pattern as 07-install-vm-prerequisites.sh.
 ensure_local_jdk() {
   if command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then
     return 0

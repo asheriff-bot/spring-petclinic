@@ -1,5 +1,5 @@
 # Production web server VM for spring-petclinic.
-# Provider/box are picked per-host by ../scripts/06-install-vm-prerequisites.sh
+# Provider/box are picked per-host by ../scripts/07-install-vm-prerequisites.sh
 # (written to .detected-env, sourced by ../scripts/07-provision-vm.sh) so the
 # same Vagrantfile works on Apple Silicon (qemu), Intel Mac, and Linux
 # (virtualbox) without editing this file.

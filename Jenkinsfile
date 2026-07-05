@@ -86,7 +86,7 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                sh './devops/scripts/09-deploy-app.sh'
+                sh './devops/scripts/10-deploy-app.sh'
             }
         }
     }

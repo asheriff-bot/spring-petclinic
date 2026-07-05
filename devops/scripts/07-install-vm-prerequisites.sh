@@ -9,7 +9,7 @@
 # (Intel Mac, Linux x86_64) VirtualBox runs the guest natively.
 #
 # Writes the chosen provider/box/sizing to devops/vagrant/.detected-env,
-# which 07-provision-vm.sh sources before `vagrant up`.
+# which 08-provision-vm.sh sources before `vagrant up`.
 #
 # Override any pick via env vars: VM_PROVIDER, VM_BOX, VM_MEMORY, VM_CPUS.
 

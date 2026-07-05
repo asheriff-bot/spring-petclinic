@@ -2,8 +2,8 @@
 # Step 10 — tear down the deployment stack (ansible-control + VM).
 #
 # Usage:
-#   ./10-teardown-vm.sh          # halt the VM, stop ansible-control (keep VM disk)
-#   ./10-teardown-vm.sh -v       # also destroy the VM entirely (vagrant destroy)
+#   ./11-teardown-vm.sh          # halt the VM, stop ansible-control (keep VM disk)
+#   ./11-teardown-vm.sh -v       # also destroy the VM entirely (vagrant destroy)
 
 set -euo pipefail
 
@@ -35,5 +35,5 @@ else
   echo "[..] halting VM (disk kept) ..."
   vagrant halt
   echo "[ok] VM halted"
-  echo "     destroy entirely: ./scripts/10-teardown-vm.sh -v"
+  echo "     destroy entirely: ./scripts/11-teardown-vm.sh -v"
 fi

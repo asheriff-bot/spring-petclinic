@@ -2,7 +2,7 @@
 # Step 8 — start the ansible-control sidecar and point it at the VM.
 #
 # Reads `vagrant ssh-config` from devops/vagrant (must already be up — run
-# ./07-provision-vm.sh first), rewrites HostName 127.0.0.1 -> host.docker.internal
+# ./08-provision-vm.sh first), rewrites HostName 127.0.0.1 -> host.docker.internal
 # (127.0.0.1 there is relative to the host, not the ansible-control container),
 # and writes devops/ansible/inventory/hosts.ini + copies the private key into
 # devops/ansible/files/vagrant_key (bind-mounted into the container).
@@ -28,7 +28,7 @@ VAGRANT_DIR="$DEVOPS_DIR/vagrant"
 ANSIBLE_DIR="$DEVOPS_DIR/ansible"
 
 if ! (cd "$VAGRANT_DIR" && vagrant status --machine-readable 2>/dev/null | grep -qE ',state,running(,|$)'); then
-  echo "[error] VM is not running — run ./devops/scripts/07-provision-vm.sh first"
+  echo "[error] VM is not running — run ./devops/scripts/08-provision-vm.sh first"
   exit 1
 fi
 
@@ -80,4 +80,4 @@ else
 fi
 
 echo
-echo "Next: ./devops/scripts/09-deploy-app.sh"
+echo "Next: ./devops/scripts/10-deploy-app.sh"
