@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Step 9 — build (if needed) and deploy spring-petclinic to the production VM.
+# Step 9 — deploy a pre-built spring-petclinic jar to the production VM.
 #
-# This is the single script both a human on a clean checkout and the
-# Jenkinsfile's Deploy stage call — so manual and CI deploys behave
-# identically. If target/*.jar already exists (e.g. Jenkins already ran
-# `./mvnw -B verify` in an earlier stage) it's reused instead of rebuilt.
+# Expects a jar to already exist under target/ — built by Jenkins in the
+# Build stage (./mvnw -B -DskipTests package). If no jar is present, the
+# script exits with an error rather than attempting a local build.
+#
+# Jenkins calls this script directly from the Deploy stage, so CI and manual
+# deploys go through identical Ansible steps.
 
 set -euo pipefail
 
@@ -29,62 +31,14 @@ if ! docker inspect "$CONTAINER" >/dev/null 2>&1; then
   exit 1
 fi
 
-# ./mvnw needs a local JDK (separate from the JRE Ansible installs on the VM).
-# Idempotent check-then-install, same pattern as 07-install-vm-prerequisites.sh.
-ensure_local_jdk() {
-  if command -v java >/dev/null 2>&1 && java -version >/dev/null 2>&1; then
-    return 0
-  fi
-
-  case "$(uname -s)" in
-    Darwin)
-      if ! command -v brew >/dev/null 2>&1; then
-        echo "[error] no local JDK and Homebrew not found — install a JDK 17 manually, then re-run"
-        exit 1
-      fi
-      OPENJDK_PREFIX="$(brew --prefix)/opt/openjdk@17"
-      if [ ! -d "$OPENJDK_PREFIX" ]; then
-        echo "[..] no local JDK found — installing OpenJDK 17 (needed to run ./mvnw) ..."
-        brew install openjdk@17
-      fi
-      export JAVA_HOME="$OPENJDK_PREFIX"
-      export PATH="$JAVA_HOME/bin:$PATH"
-      ;;
-    Linux)
-      echo "[..] no local JDK found — installing OpenJDK 17 (needed to run ./mvnw) ..."
-      sudo apt-get update
-      sudo apt-get install -y openjdk-17-jdk-headless
-      ;;
-    *)
-      echo "[error] unsupported OS for automatic JDK install — install a JDK 17 manually"
-      exit 1
-      ;;
-  esac
-
-  if ! java -version >/dev/null 2>&1; then
-    echo "[error] JDK install did not produce a working 'java' on PATH"
-    exit 1
-  fi
-  echo "[ok] local JDK ready: $(java -version 2>&1 | head -1)"
-}
-
 shopt -s nullglob
 JARS=(target/spring-petclinic-*.jar)
 shopt -u nullglob
 
 if [ "${#JARS[@]}" -eq 0 ]; then
-  ensure_local_jdk
-  echo "[..] no jar in target/ — building ..."
-  ./mvnw -B -DskipTests package
-  shopt -s nullglob
-  JARS=(target/spring-petclinic-*.jar)
-  shopt -u nullglob
-else
-  echo "[ok] reusing existing jar (skip rebuild)"
-fi
-
-if [ "${#JARS[@]}" -eq 0 ]; then
-  echo "[error] build did not produce a jar under target/"
+  echo "[error] no jar found under target/ — trigger a Jenkins build first:"
+  echo "        http://localhost:8081/job/Build/build"
+  echo "        (or push a commit if the SCM poll trigger is active)"
   exit 1
 fi
 

@@ -2,16 +2,21 @@
 # Joins the existing petclinic-devops-net so Jenkins can `docker exec`/`docker cp`
 # into it (via the docker.sock it already has mounted) without needing to be on
 # the same network itself.
+#
+# ansible_data is a named Docker volume (not a host bind mount) so it works on
+# macOS without requiring Docker Desktop File Sharing configuration.
+# 09-configure-ansible-control.sh injects the inventory and SSH key via `docker cp`.
 
 services:
   ansible-control:
     build:
-      context: ./docker/ansible-control
+      context: .
+      dockerfile: ./docker/ansible-control/Dockerfile
     image: petclinic-ansible-control
     container_name: petclinic-ansible-control
     restart: unless-stopped
     volumes:
-      - ./ansible:/ansible
+      - ansible_data:/ansible
     working_dir: /ansible
     networks:
       - petclinic-devops-net
@@ -24,3 +29,6 @@ networks:
   petclinic-devops-net:
     external: true
     name: petclinic-devops-net
+
+volumes:
+  ansible_data:
