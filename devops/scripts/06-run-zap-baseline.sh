@@ -50,8 +50,10 @@ fi
 docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
 
 # Propagate the scan result:
-#   0 = clean, 1 = warnings (informational — don't fail the build), 2 = failures.
-if [ "$scan_rc" -ge 2 ]; then
+#   0 = clean, 1 = warnings, 2 = warnings (newer ZAP versions), 3+ = hard failures.
+#   Warnings are informational — don't fail the build. Only fail on code 3+
+#   which indicates ZAP couldn't run at all (connectivity, config errors, etc).
+if [ "$scan_rc" -ge 3 ]; then
   exit "$scan_rc"
 fi
 exit 0
