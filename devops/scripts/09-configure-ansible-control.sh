@@ -4,8 +4,8 @@
 # Reads `vagrant ssh-config` from devops/vagrant (must already be up — run
 # ./08-provision-vm.sh first), rewrites HostName 127.0.0.1 -> host.docker.internal
 # (127.0.0.1 there is relative to the host, not the ansible-control container),
-# and writes devops/ansible/inventory/hosts.ini + copies the private key into
-# devops/ansible/files/vagrant_key (bind-mounted into the container).
+# then injects the inventory file and SSH key into the container via `docker cp`.
+# No host bind mount is used, so Docker Desktop File Sharing is not required.
 #
 # Idempotent: safe to re-run after the VM is recreated or its SSH port changes.
 
@@ -25,7 +25,6 @@ export PATH
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEVOPS_DIR="$(dirname "$SCRIPT_DIR")"
 VAGRANT_DIR="$DEVOPS_DIR/vagrant"
-ANSIBLE_DIR="$DEVOPS_DIR/ansible"
 
 if ! (cd "$VAGRANT_DIR" && vagrant status --machine-readable 2>/dev/null | grep -qE ',state,running(,|$)'); then
   echo "[error] VM is not running — run ./devops/scripts/08-provision-vm.sh first"
@@ -60,22 +59,35 @@ fi
 
 echo "[ok] VM reachable at ${SSH_USER}@${SSH_HOSTNAME}:${SSH_PORT} (key: $SSH_KEY)"
 
-mkdir -p "$ANSIBLE_DIR/inventory" "$ANSIBLE_DIR/files"
-cp "$SSH_KEY" "$ANSIBLE_DIR/files/vagrant_key"
-chmod 600 "$ANSIBLE_DIR/files/vagrant_key"
+# ── Inject inventory and SSH key into the container via docker cp ─────────────
+# The ansible_data volume is not a host bind mount (avoids Docker Desktop File
+# Sharing restrictions on macOS), so we push files in with docker cp instead.
 
-cat > "$ANSIBLE_DIR/inventory/hosts.ini" <<EOF
+TMPDIR_HOST="$(mktemp -d)"
+trap 'rm -rf "$TMPDIR_HOST"' EXIT
+
+mkdir -p "$TMPDIR_HOST/inventory" "$TMPDIR_HOST/files"
+
+cp "$SSH_KEY" "$TMPDIR_HOST/files/vagrant_key"
+chmod 600 "$TMPDIR_HOST/files/vagrant_key"
+
+cat > "$TMPDIR_HOST/inventory/hosts.ini" <<EOF
 [webservers]
 petclinic-prod ansible_host=${ANSIBLE_HOST} ansible_port=${SSH_PORT} ansible_user=${SSH_USER} ansible_ssh_private_key_file=/ansible/files/vagrant_key ansible_python_interpreter=/usr/bin/python3
 EOF
 
-echo "[ok] wrote $ANSIBLE_DIR/inventory/hosts.ini"
+echo "[..] copying inventory and SSH key into petclinic-ansible-control ..."
+docker exec petclinic-ansible-control mkdir -p /ansible/inventory /ansible/files
+docker cp "$TMPDIR_HOST/inventory/hosts.ini"  petclinic-ansible-control:/ansible/inventory/hosts.ini
+docker cp "$TMPDIR_HOST/files/vagrant_key"    petclinic-ansible-control:/ansible/files/vagrant_key
+docker exec petclinic-ansible-control chmod 600 /ansible/files/vagrant_key
+echo "[ok] inventory and key in place"
 
 echo "[..] verifying connectivity from ansible-control ..."
 if docker exec petclinic-ansible-control ansible webservers -m ping -i inventory/hosts.ini; then
   echo "[ok] ansible-control can reach the VM"
 else
-  echo "[error] ansible ping failed — check devops/ansible/inventory/hosts.ini and that the VM is up"
+  echo "[error] ansible ping failed — check that the inventory was injected correctly and the VM is up"
   exit 1
 fi
 

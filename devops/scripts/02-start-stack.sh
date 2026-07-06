@@ -15,7 +15,28 @@ echo "[..] pulling base images (jenkins, sonarqube, postgres) ..."
 docker compose pull
 
 echo "[..] starting containers ..."
-docker compose up -d
+docker compose up -d --remove-orphans
+
+# Inject Prometheus config without needing a host bind mount.
+# We wait for the container to exist, docker cp the file in, then restart it.
+echo "[..] injecting Prometheus config ..."
+PROM_CONFIG="$DEVOPS_DIR/prometheus/prometheus.yml"
+if [ ! -f "$PROM_CONFIG" ]; then
+  echo "[error] Prometheus config not found at $PROM_CONFIG"
+  exit 1
+fi
+
+# Wait briefly for the container to appear (compose up -d returns fast).
+for i in $(seq 1 10); do
+  if docker inspect petclinic-prometheus >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+docker cp "$PROM_CONFIG" petclinic-prometheus:/etc/prometheus/prometheus.yml
+docker restart petclinic-prometheus >/dev/null
+echo "[ok] Prometheus config installed and container restarted"
 
 echo
 echo "Stack started. Useful URLs:"
