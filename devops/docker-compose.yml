@@ -79,11 +79,16 @@ services:
     image: ghcr.io/zaproxy/zaproxy:stable
     container_name: petclinic-zap
     restart: "no"
-    user: root
+    # One-shot scanner — kept out of `docker compose up` via a profile so it is
+    # only created when explicitly invoked by 06-run-zap-baseline.sh.
+    profiles:
+      - scan
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - petclinic-devops-net
-    volumes:
-      - ./reports/zap:/zap/wrk
+    # No host bind mount: the report is copied out with `docker cp` instead,
+    # which avoids Docker Desktop's File Sharing requirement on macOS.
 
   prometheus:
     image: prom/prometheus:latest
@@ -91,8 +96,8 @@ services:
     restart: unless-stopped
     ports:
       - "9090:9090"
-    volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    # Config is injected via `docker cp` in 02-start-stack.sh to avoid
+    # Docker Desktop File Sharing requirements on macOS.
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
     networks:
