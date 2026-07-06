@@ -87,8 +87,11 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - petclinic-devops-net
-    # No host bind mount: the report is copied out with `docker cp` instead,
+    # Anonymous volume for ZAP's working directory so -r report output works.
+    # The report is copied out with `docker cp` instead of a host bind mount,
     # which avoids Docker Desktop's File Sharing requirement on macOS.
+    volumes:
+      - /zap/wrk
 
   prometheus:
     image: prom/prometheus:latest
