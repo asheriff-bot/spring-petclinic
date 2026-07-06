@@ -78,15 +78,32 @@ pipeline {
             }
         }
 
-        stage('ZAP Baseline Scan') {
-            steps {
-                sh './devops/scripts/06-run-zap-baseline.sh'
-            }
-        }
-
         stage('Deploy') {
             steps {
                 sh './devops/scripts/10-deploy-app.sh'
+            }
+        }
+
+        stage('ZAP Baseline Scan') {
+            steps {
+                // Wait for the app to be reachable before starting the scan.
+                // The app runs on the VM; Vagrant forwards guest :8080 → host :8080,
+                // which ZAP reaches via host.docker.internal:8080.
+                sh '''
+                    echo "[..] waiting for app at http://host.docker.internal:8080 ..."
+                    for i in $(seq 1 30); do
+                        if curl -sf -o /dev/null http://host.docker.internal:8080; then
+                            echo "[ok] app is up"
+                            break
+                        fi
+                        if [ "$i" -eq 30 ]; then
+                            echo "[error] app did not become reachable in time — skipping ZAP scan"
+                            exit 1
+                        fi
+                        sleep 5
+                    done
+                '''
+                sh './devops/scripts/06-run-zap-baseline.sh'
             }
         }
     }
