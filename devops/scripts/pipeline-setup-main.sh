@@ -58,6 +58,19 @@ run_step "Step 2 — Configure Jenkins pipeline" \
 run_step "Step 3 — Wire SonarQube into Jenkins" \
   "$SCRIPT_DIR/05-configure-sonarqube-jenkins.sh"
 
+step "Waiting for monitoring services..."
+
+for i in $(seq 1 60); do
+  if curl -sf http://localhost:9090/-/healthy >/dev/null && \
+     curl -sf http://localhost:3000/api/health >/dev/null; then
+    ok "Monitoring services are ready"
+    break
+  fi
+  sleep 2
+done
+
+run_step "Step 3.5 — Configure monitoring (Prometheus + Grafana)" \
+  "$SCRIPT_DIR/configure-monitoring.sh"
 run_step "Step 4 — Install VM prerequisites (Vagrant + hypervisor)" \
   "$SCRIPT_DIR/07-install-vm-prerequisites.sh"
 
