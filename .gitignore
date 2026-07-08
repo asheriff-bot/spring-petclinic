@@ -46,3 +46,11 @@ out/
 _site/
 *.css
 !petclinic.css
+
+### Vagrant / Ansible (devops/vagrant, devops/ansible) ###
+.vagrant/
+devops/vagrant/.detected-env
+devops/ansible/inventory/hosts.ini
+devops/ansible/files/*
+!devops/ansible/files/.gitkeep
+*.retry

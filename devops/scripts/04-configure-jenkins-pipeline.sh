@@ -33,6 +33,7 @@ REQUIRED_PLUGINS=(
   sonar
   timestamper
   junit
+  blueocean
 )
 
 echo "[..] installing required Jenkins plugins ..."

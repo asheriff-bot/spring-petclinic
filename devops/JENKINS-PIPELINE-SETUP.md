@@ -9,19 +9,7 @@ git commit -m "Add Jenkins CI pipeline and SonarQube Maven config"
 git push origin main
 ```
 
-## 2. SonarQube token
-
-1. Open http://localhost:9000 and sign in (`admin` / your password).
-2. **My Account → Security → Generate Token** (name: `jenkins`).
-3. Copy the token.
-
-## 3. Jenkins credential
-
-1. http://localhost:8081 → **Manage Jenkins → Credentials**.
-2. **(global) → Add Credentials**.
-3. Kind: **Secret text**, ID: **`sonarqube-system-token`**, Secret: paste SonarQube token.
-
-## 4. Configure the Build job
+## 2. Wire SonarQube into Jenkins (auto-provisioned)
 
 From repo root:
 
@@ -30,9 +18,28 @@ From repo root:
 ./devops/scripts/04-configure-jenkins-pipeline.sh
 ```
 
-This switches the **Build** job to **Pipeline from SCM** using `Jenkinsfile` on `main`, with SonarQube scan + Quality Gate stages.
+`05` does everything that used to be manual:
 
-## 5. Run the pipeline
+- installs the SonarQube Jenkins plugin
+- generates a SonarQube user token via the SonarQube REST API
+- injects it into Jenkins as the `sonarqube-system-token` Secret-text credential
+- registers the SonarQube server in Jenkins global config
+
+`04` switches the **Build** job to **Pipeline from SCM** using `Jenkinsfile` on `main`.
+
+### Bring your own token
+
+If you already have a SonarQube token (or your admin password is not the default `admin`), set env vars before running `05`:
+
+```bash
+SONAR_TOKEN=squ_xxx ./devops/scripts/05-configure-sonarqube-jenkins.sh
+# or
+SONAR_ADMIN_PASSWORD='your-pw' ./devops/scripts/05-configure-sonarqube-jenkins.sh
+```
+
+Other overrides: `SONAR_NAME`, `SONAR_URL` (as Jenkins sees it), `SONAR_PUBLIC_URL` (host-side, used for REST calls), `SONAR_TOKEN_NAME`, `CREDENTIAL_ID`, `JENKINS_CONTAINER`.
+
+## 3. Run the pipeline
 
 1. Jenkins dashboard → **Build** → **Build Now**.
 2. Open **Console Output** — expect checkout, Maven verify (~2–5 min), SonarQube scan, Quality Gate.
@@ -42,7 +49,8 @@ This switches the **Build** job to **Pipeline from SCM** using `Jenkinsfile` on 
 | Issue | Fix |
 |-------|-----|
 | Checkout fails | Push `Jenkinsfile` to GitHub first |
-| SonarQube skipped | Add credential `sonarqube-system-token` under System → Global |
+| `05` aborts on SonarQube login | Set `SONAR_ADMIN_PASSWORD` env var |
+| Credential not found in Jenkins | `docker logs petclinic-jenkins \| grep '\[init\]'` — the Groovy init script logs success/failure |
 | SonarQube connection refused | Ensure stack is up: `./devops/scripts/02-start-stack.sh` |
-| Build &lt; 1 second | Old empty pipeline — re-run `./devops/scripts/04-configure-jenkins-pipeline.sh` |
-| Quality Gate skipped | Run `./devops/scripts/05-configure-sonarqube-jenkins.sh` first |
+| Build < 1 second | Old empty pipeline — re-run `./devops/scripts/04-configure-jenkins-pipeline.sh` |
+| Quality Gate skipped | Re-run `./devops/scripts/05-configure-sonarqube-jenkins.sh` |
