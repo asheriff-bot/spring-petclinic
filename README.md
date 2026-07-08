@@ -10,6 +10,9 @@ See the presentation here:
 > **Note:** These slides refer to a legacy, pre–Spring Boot version of Petclinic and may not reflect the current Spring Boot–based implementation.  
 > For up-to-date information, please refer to this repository and its documentation.
 
+## Demo Video
+
+Provide a short video demonstrating the automated build, deployment, and monitoring process in Jenkins, Prometheus, and Grafana: [devops/video/video-link.txt](devops/video/video-link.txt).
 
 ## Run Petclinic locally
 
