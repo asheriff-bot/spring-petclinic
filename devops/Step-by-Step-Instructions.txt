@@ -1,0 +1,128 @@
+0. Prerequisites.
+
+   - Docker Desktop (or Docker Engine + Compose) installed and running.
+   - bash (macOS/Linux native; on Windows use WSL or Git Bash).
+   - Ports 8081 (Jenkins), 9000 (SonarQube), 9090 (Prometheus), 3000 (Grafana),
+     and 8080 (app on the VM) free on the host.
+   - ~4GB free RAM for the containers, plus 2GB/2 CPUs for the production VM.
+   - First run only: make the scripts executable (if not already) chmod +x devops/scripts/*.sh
+
+1. Run the ./devops/scripts/pipeline-setup-main.sh
+   This scripts serves as a orchestrator script that uses all other scripts together
+   to piece together the pipeline setup. This script does the following:
+
+   a. Starts the stack. (devops/scripts/02-start-stack.sh)
+
+      Ensures the shared bridge network exists, pulls the Jenkins/SonarQube/Postgres
+      base images, and brings the stack up with docker compose. Also injects the
+      Prometheus config into the running container and restarts it.
+
+   b. Configures jenkins pipeline. (devops/scripts/04-configure-jenkins-pipeline.sh)
+
+      Installs the required Jenkins plugins and writes the "Build" job config so it
+      pulls the Jenkinsfile from the repo. Drops a Groovy init script so the SCM poll
+      trigger starts automatically on every Jenkins boot, then restarts Jenkins.
+
+   c. Wires SonarQube into Jenkins. (devops/scripts/05-configure-sonarqube-jenkins.sh)
+
+      Installs the SonarQube plugin, provisions a SonarQube user token, registers the
+      SonarQube-to-Jenkins webhook (needed for waitForQualityGate), and injects the
+      token into Jenkins as a credential via a one-shot Groovy init script. Restarts
+      Jenkins once and verifies the credential landed.
+
+   d. Configures monitoring. (devops/scripts/configure-monitoring.sh)
+
+      Installs the Prometheus plugin in Jenkins, restarts it, and confirms Prometheus
+      is actively scraping the Jenkins metrics endpoint before continuing.
+
+   e. Installs VM pre-requisites for the production VM. (devops/scripts/07-install-vm-prerequisites.sh)
+
+      Detects the host OS/architecture and installs whatever hypervisor and Vagrant
+      are missing (VirtualBox on Intel/Linux, QEMU on Apple Silicon). Records the
+      chosen provider/box/sizing so the next step can use it.
+
+   f. Provisions the production VM. (devops/scripts/08-provision-vm.sh)
+
+      Brings up the production-web-server VM with Vagrant using the settings detected
+      in the previous step, then waits until it is reachable over SSH.
+
+   g. Configures ansible to deploy to the production VM. (devops/scripts/09-configure-ansible-control.sh)
+
+      Starts the ansible-control sidecar container and copies in the SSH key and an
+      inventory file built from `vagrant ssh-config`, then verifies connectivity with
+      an Ansible ping.
+
+   After the orchestrator finishes, trigger a Jenkins build to produce the jar, then
+   deploy it manually if needed.
+
+   Verify it worked:
+   - Jenkins:   http://localhost:8081 — "Build" job exists, Git Polling Log shows
+     the trigger is active.
+   - SonarQube: http://localhost:9000 — logged in as admin/admin (change on first
+     use), a "Jenkins" webhook exists under Administration > Webhooks.
+   - Prometheus: http://localhost:9090/targets — "jenkins" target is Up.
+   - Grafana:   http://localhost:3000 — Jenkins dashboard shows data.
+   - VM: from devops/vagrant, `vagrant status` shows "running".
+
+1.5 What the Jenkins pipeline does. (Jenkinsfile, at repo root)
+
+   Once step 1 is complete, every push to main (or manual "Build Now") polls the
+   repo and runs these stages in order:
+
+   a. Checkout: pulls the repo at the configured branch.
+
+   b. Build & Test: ./mvnw -B verify. Compiles and runs the unit/integration
+      test suite. A failure here stops the pipeline (hard gate).
+
+   c. SonarQube Analysis: ./mvnw -B sonar:sonar. Uploads code to SonarQube for
+      static analysis (bugs, vulnerabilities, code smells, coverage).
+
+   d. Quality Gate: waits (up to 5 min) for SonarQube's verdict on that analysis
+      via the webhook from step 1c. abortPipeline: true, so a failed gate stops
+      the pipeline here (hard security/quality gate).
+
+   e. Deploy: runs 10-deploy-app.sh (see step 2 below) to ship the jar to the
+      production VM.
+
+   f. ZAP Baseline Scan: waits for the deployed app to respond, then runs
+      06-run-zap-baseline.sh (step 3 below) against it. Findings are archived
+      as a report but do not fail the build (informational, not a gate). We decided
+      to make it informational because there were existing ZAP quality issues within
+      the project and we determined fixing these application specific vulnerabilities
+      was out of scope for the project. In a real pipeline, these ZAP scan will fail
+      the Jenkins repository if the '-I' flag is removed as is probably the desired
+      behavior depending on organization standards.
+
+   post-build: test results are published (JUnit) and the ZAP report is archived
+   as a build artifact regardless of pass/fail.
+
+2. Deploy the app. (./devops/scripts/10-deploy-app.sh)
+
+   Copies the built jar (from target/) into the ansible-control container and runs
+   the Ansible deploy playbook against the production VM. Jenkins calls this same
+   script from its Deploy stage, so CI and manual deploys follow identical steps.
+
+3. (Optional) Run a security baseline scan. (./devops/scripts/06-run-zap-baseline.sh)
+
+   Runs a ZAP baseline scan against the running app and saves the HTML report to
+   devops/reports/zap. Only fails the run on a hard ZAP failure, not on findings.
+
+
+4. Tear down the environment. (devops/scripts/teardown-main.sh)
+
+   This is the reverse of pipeline-setup-main.sh. By default it does a soft stop:
+   halts the VM and stops ansible-control (devops/scripts/11-teardown-vm.sh), then
+   stops Jenkins/SonarQube/Postgres (devops/scripts/03-stop-stack.sh), keeping the
+   VM disk and Docker volumes intact so everything can resume where it left off.
+   Pass -v to fully destroy the VM and remove the Docker volumes instead.
+
+5. Troubleshooting.
+
+   - Any step failed: every script is idempotent which means you can fix the error and re-run
+     pipeline-setup-main.sh, already-completed steps are safe to repeat.
+   - "port already in use": another process is on 8081/9000/9090/3000/8080 — stop
+     it or free the port before re-running.
+   - macOS VirtualBox: approve its kernel extension in System Settings > Privacy &
+     Security, then re-run 07-install-vm-prerequisites.sh.
+   - Jenkins/SonarQube slow to respond right after start: the scripts already poll
+     health endpoints before continuing, so just let them wait.
